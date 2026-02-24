@@ -7,7 +7,7 @@ use super::vector_search::{ChunkConfig, VectorIndex, VectorSearcher};
 use crate::config::LlmConfig;
 use crate::document::Document;
 use crate::indexer::TreeIndexer;
-use crate::llm::LlmClient;
+use crate::llm::{LlmClient, Prompts};
 use crate::search::{Relevance, TreeSearcher};
 use crate::tree::DocumentTree;
 use anyhow::Result;
@@ -55,10 +55,14 @@ pub struct ItemResult {
     pub item_id: String,
     /// PageIndex retrieved content.
     pub pageindex_content: Option<String>,
+    /// PageIndex generated answer.
+    pub pageindex_answer: Option<String>,
     /// PageIndex retrieval time.
     pub pageindex_time_ms: Option<u64>,
     /// Vector search retrieved content.
     pub vector_content: Option<String>,
+    /// Vector search generated answer (RAG).
+    pub vector_answer: Option<String>,
     /// Vector search retrieval time.
     pub vector_time_ms: Option<u64>,
     /// Comparison result from judge.
@@ -254,7 +258,7 @@ impl Benchmark {
         let llm_client = LlmClient::new(self.llm_config.clone());
         let judge = LlmJudge::new(llm_client.clone());
         let indexer = TreeIndexer::new(llm_client.clone());
-        let searcher = TreeSearcher::new(llm_client);
+        let searcher = TreeSearcher::new(llm_client.clone());
 
         // Determine items to process
         let items: Vec<_> = if let Some(max) = self.config.max_items {
@@ -275,7 +279,14 @@ impl Benchmark {
             }
 
             let item_result = self
-                .process_item(item, &indexer, &searcher, &judge, embedding_model.as_ref())
+                .process_item(
+                    item,
+                    &indexer,
+                    &searcher,
+                    &judge,
+                    &llm_client,
+                    embedding_model.as_ref(),
+                )
                 .await;
 
             results.item_results.push(item_result);
@@ -298,24 +309,45 @@ impl Benchmark {
         indexer: &TreeIndexer,
         searcher: &TreeSearcher,
         judge: &LlmJudge,
+        llm_client: &LlmClient,
         embedding_model: Option<&EmbeddingModel>,
     ) -> ItemResult {
         let mut result = ItemResult {
             item_id: item.id.clone(),
             pageindex_content: None,
+            pageindex_answer: None,
             pageindex_time_ms: None,
             vector_content: None,
+            vector_answer: None,
             vector_time_ms: None,
             comparison: None,
             error: None,
         };
 
-        // Run PageIndex
+        // Run PageIndex retrieval
         if self.config.run_pageindex {
             match self.run_pageindex(item, indexer, searcher).await {
                 Ok((content, duration)) => {
-                    result.pageindex_content = Some(content);
+                    result.pageindex_content = Some(content.clone());
                     result.pageindex_time_ms = Some(duration.as_millis() as u64);
+
+                    // Generate answer from retrieved content
+                    if self.config.verbose {
+                        println!("  [PageIndex] Generating answer from retrieved content...");
+                    }
+                    match self
+                        .generate_answer(llm_client, &item.question, &content)
+                        .await
+                    {
+                        Ok(answer) => {
+                            result.pageindex_answer = Some(answer);
+                        }
+                        Err(e) => {
+                            if self.config.verbose {
+                                eprintln!("  PageIndex answer generation error: {}", e);
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     result.error = Some(format!("PageIndex error: {}", e));
@@ -326,13 +358,31 @@ impl Benchmark {
             }
         }
 
-        // Run Vector search
+        // Run Vector search retrieval
         if self.config.run_vector {
             if let Some(model) = embedding_model {
                 match self.run_vector_search(item, model).await {
                     Ok((content, duration)) => {
-                        result.vector_content = Some(content);
+                        result.vector_content = Some(content.clone());
                         result.vector_time_ms = Some(duration.as_millis() as u64);
+
+                        // Generate answer from retrieved content (standard RAG)
+                        if self.config.verbose {
+                            println!("  [Vector RAG] Generating answer from retrieved content...");
+                        }
+                        match self
+                            .generate_answer(llm_client, &item.question, &content)
+                            .await
+                        {
+                            Ok(answer) => {
+                                result.vector_answer = Some(answer);
+                            }
+                            Err(e) => {
+                                if self.config.verbose {
+                                    eprintln!("  Vector RAG answer generation error: {}", e);
+                                }
+                            }
+                        }
                     }
                     Err(e) => {
                         let err_msg = format!("Vector search error: {}", e);
@@ -349,17 +399,20 @@ impl Benchmark {
             }
         }
 
-        // Run comparison if both methods produced results
-        if let (Some(pi_content), Some(vec_content)) =
-            (&result.pageindex_content, &result.vector_content)
+        // Run comparison if both methods produced ANSWERS (not just content)
+        if let (Some(pi_answer), Some(vec_answer)) =
+            (&result.pageindex_answer, &result.vector_answer)
         {
+            if self.config.verbose {
+                println!("  [Judge] Comparing answers...");
+            }
             match judge
-                .compare_systems(
+                .compare_answers(
                     &item.question,
                     "PageIndex",
-                    pi_content,
-                    "VectorSearch",
-                    vec_content,
+                    pi_answer,
+                    "VectorRAG",
+                    vec_answer,
                     item.answer.as_deref(),
                 )
                 .await
@@ -368,7 +421,7 @@ impl Benchmark {
                     if self.config.verbose {
                         let winner_str = match comparison.winner {
                             1 => "PageIndex",
-                            2 => "VectorSearch",
+                            2 => "VectorRAG",
                             _ => "Tie",
                         };
                         println!(
@@ -389,6 +442,21 @@ impl Benchmark {
         result
     }
 
+    /// Generate an answer from retrieved content using LLM.
+    async fn generate_answer(
+        &self,
+        client: &LlmClient,
+        question: &str,
+        context: &str,
+    ) -> Result<String> {
+        let prompt = Prompts::rag_answer()
+            .replace("{question}", question)
+            .replace("{context}", context);
+
+        let answer = client.complete(None, &prompt).await?;
+        Ok(answer.trim().to_string())
+    }
+
     /// Run PageIndex on a single item.
     async fn run_pageindex(
         &self,
@@ -403,7 +471,9 @@ impl Benchmark {
 
         // Check cache first
         let cache = self.tree_cache.read().await;
-        let cached = cache.get(&doc_hash).map(|c| (c.tree.clone(), c.document.clone()));
+        let cached = cache
+            .get(&doc_hash)
+            .map(|c| (c.tree.clone(), c.document.clone()));
         drop(cache);
 
         let (tree, doc) = if let Some((tree, doc)) = cached {
@@ -423,10 +493,13 @@ impl Benchmark {
 
             // Cache the tree
             let mut cache = self.tree_cache.write().await;
-            cache.insert(doc_hash, CachedTree {
-                tree: tree.clone(),
-                document: doc.clone(),
-            });
+            cache.insert(
+                doc_hash,
+                CachedTree {
+                    tree: tree.clone(),
+                    document: doc.clone(),
+                },
+            );
 
             (tree, doc)
         };
@@ -516,8 +589,10 @@ mod tests {
         results.item_results.push(ItemResult {
             item_id: "1".to_string(),
             pageindex_content: Some("content".to_string()),
+            pageindex_answer: Some("answer 1".to_string()),
             pageindex_time_ms: Some(100),
             vector_content: Some("content".to_string()),
+            vector_answer: Some("answer 1".to_string()),
             vector_time_ms: Some(50),
             comparison: Some(ComparisonResult {
                 winner: 1,
@@ -531,8 +606,10 @@ mod tests {
         results.item_results.push(ItemResult {
             item_id: "2".to_string(),
             pageindex_content: Some("content".to_string()),
+            pageindex_answer: Some("answer 2".to_string()),
             pageindex_time_ms: Some(150),
             vector_content: Some("content".to_string()),
+            vector_answer: Some("answer 2".to_string()),
             vector_time_ms: Some(60),
             comparison: Some(ComparisonResult {
                 winner: 2,

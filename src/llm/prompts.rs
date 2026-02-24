@@ -217,6 +217,24 @@ Provide ONLY the summary text, nothing else. Be specific about what information 
     pub fn system_document_analyzer() -> &'static str {
         "You are an expert document analyzer. You help extract structure, navigate content, and answer questions about documents. Always respond with valid JSON when requested."
     }
+
+    /// Prompt for RAG answer generation - used to generate answers from retrieved context.
+    pub fn rag_answer() -> &'static str {
+        r#"You are a helpful assistant answering questions based on the provided context.
+
+Question: {question}
+
+Context (retrieved from document):
+{context}
+
+Instructions:
+- Answer the question using ONLY the information provided in the context above.
+- If the context does not contain enough information to answer the question, say "I cannot answer this question based on the provided context."
+- Be concise and direct in your answer.
+- Do not make up information that is not in the context.
+
+Answer:"#
+    }
 }
 
 #[cfg(test)]
@@ -232,5 +250,6 @@ mod tests {
         assert!(!Prompts::check_title_appearance().is_empty());
         assert!(!Prompts::tree_search().is_empty());
         assert!(!Prompts::generate_node_summary().is_empty());
+        assert!(!Prompts::rag_answer().is_empty());
     }
 }

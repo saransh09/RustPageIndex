@@ -139,6 +139,59 @@ Respond with only the JSON, no other text."#,
         Ok(result)
     }
 
+    /// Compare two RAG system answers head-to-head.
+    /// This is a fairer comparison as both systems use LLM to generate answers from retrieved content.
+    pub async fn compare_answers(
+        &self,
+        query: &str,
+        system1_name: &str,
+        system1_answer: &str,
+        system2_name: &str,
+        system2_answer: &str,
+        ground_truth: Option<&str>,
+    ) -> Result<ComparisonResult> {
+        let ground_truth_section = ground_truth
+            .map(|gt| format!("\n\nGround Truth Answer: {}", gt))
+            .unwrap_or_default();
+
+        let prompt = format!(
+            r#"You are an expert judge comparing answers from two RAG (Retrieval-Augmented Generation) systems.
+
+Question: {}
+
+System A ({}) Answer:
+{}
+
+---
+
+System B ({}) Answer:
+{}
+{}
+
+Compare the two answers:
+1. Which answer is more accurate, complete, and helpful for the question?
+2. Rate each answer's quality (1-5) based on:
+   - Accuracy: Is the information correct?
+   - Completeness: Does it fully answer the question?
+   - Relevance: Does it directly address what was asked?
+
+Respond in JSON format:
+{{
+    "winner": "<A, B, or TIE>",
+    "score_system_a": <1-5>,
+    "score_system_b": <1-5>,
+    "explanation": "<brief explanation of why one answer is better>"
+}}
+
+Respond with only the JSON, no other text."#,
+            query, system1_name, system1_answer, system2_name, system2_answer, ground_truth_section
+        );
+
+        let response = self.client.complete(None, &prompt).await?;
+        let result = Self::parse_comparison_response(&response)?;
+        Ok(result)
+    }
+
     /// Parse judge response JSON.
     fn parse_judge_response(response: &str) -> Result<JudgeResult> {
         let json_str = Self::extract_json(response);
