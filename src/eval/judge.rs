@@ -142,7 +142,7 @@ Respond with only the JSON, no other text."#,
     /// Parse judge response JSON.
     fn parse_judge_response(response: &str) -> Result<JudgeResult> {
         let json_str = Self::extract_json(response);
-        
+
         #[derive(Deserialize)]
         struct RawJudgeResult {
             relevance: u8,
@@ -150,11 +150,12 @@ Respond with only the JSON, no other text."#,
             explanation: String,
         }
 
-        let raw: RawJudgeResult = serde_json::from_str(&json_str)
-            .map_err(|e| crate::error::PageIndexError::LlmParse(format!(
+        let raw: RawJudgeResult = serde_json::from_str(&json_str).map_err(|e| {
+            crate::error::PageIndexError::LlmParse(format!(
                 "Failed to parse judge response: {}. Response: {}",
                 e, response
-            )))?;
+            ))
+        })?;
 
         Ok(JudgeResult {
             relevance: raw.relevance.clamp(1, 5),
@@ -166,7 +167,7 @@ Respond with only the JSON, no other text."#,
     /// Parse comparison response JSON.
     fn parse_comparison_response(response: &str) -> Result<ComparisonResult> {
         let json_str = Self::extract_json(response);
-        
+
         #[derive(Deserialize)]
         struct RawComparisonResult {
             winner: String,
@@ -175,11 +176,12 @@ Respond with only the JSON, no other text."#,
             explanation: String,
         }
 
-        let raw: RawComparisonResult = serde_json::from_str(&json_str)
-            .map_err(|e| crate::error::PageIndexError::LlmParse(format!(
+        let raw: RawComparisonResult = serde_json::from_str(&json_str).map_err(|e| {
+            crate::error::PageIndexError::LlmParse(format!(
                 "Failed to parse comparison response: {}. Response: {}",
                 e, response
-            )))?;
+            ))
+        })?;
 
         let winner = match raw.winner.to_uppercase().as_str() {
             "A" => 1,
@@ -237,7 +239,7 @@ mod tests {
     fn test_parse_judge_response() {
         let response = r#"{"relevance": 4, "answerable": true, "explanation": "Good content"}"#;
         let result = LlmJudge::parse_judge_response(response).unwrap();
-        
+
         assert_eq!(result.relevance, 4);
         assert!(result.answerable);
     }
@@ -246,7 +248,7 @@ mod tests {
     fn test_parse_comparison_response() {
         let response = r#"{"winner": "A", "score_system_a": 5, "score_system_b": 3, "explanation": "A is better"}"#;
         let result = LlmJudge::parse_comparison_response(response).unwrap();
-        
+
         assert_eq!(result.winner, 1);
         assert_eq!(result.score_system1, 5);
         assert_eq!(result.score_system2, 3);

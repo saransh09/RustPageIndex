@@ -9,9 +9,14 @@ use crate::document::Document;
 use crate::indexer::TreeIndexer;
 use crate::llm::LlmClient;
 use crate::search::{Relevance, TreeSearcher};
+use crate::tree::DocumentTree;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 
 /// Configuration for the benchmark.
 #[derive(Debug, Clone)]
@@ -151,8 +156,7 @@ impl BenchmarkResults {
                 pageindex_times.iter().sum::<f64>() / pageindex_times.len() as f64;
         }
         if !vector_times.is_empty() {
-            self.avg_vector_time_ms =
-                vector_times.iter().sum::<f64>() / vector_times.len() as f64;
+            self.avg_vector_time_ms = vector_times.iter().sum::<f64>() / vector_times.len() as f64;
         }
     }
 
@@ -162,12 +166,33 @@ impl BenchmarkResults {
         println!("Dataset: {}", self.dataset_name);
         println!("Total items: {}", self.total_items);
         println!("----------------------------------------");
-        println!("PageIndex wins: {} ({:.1}%)", self.pageindex_wins, 
-            if self.total_items > 0 { self.pageindex_wins as f64 / self.total_items as f64 * 100.0 } else { 0.0 });
-        println!("Vector wins:    {} ({:.1}%)", self.vector_wins,
-            if self.total_items > 0 { self.vector_wins as f64 / self.total_items as f64 * 100.0 } else { 0.0 });
-        println!("Ties:           {} ({:.1}%)", self.ties,
-            if self.total_items > 0 { self.ties as f64 / self.total_items as f64 * 100.0 } else { 0.0 });
+        println!(
+            "PageIndex wins: {} ({:.1}%)",
+            self.pageindex_wins,
+            if self.total_items > 0 {
+                self.pageindex_wins as f64 / self.total_items as f64 * 100.0
+            } else {
+                0.0
+            }
+        );
+        println!(
+            "Vector wins:    {} ({:.1}%)",
+            self.vector_wins,
+            if self.total_items > 0 {
+                self.vector_wins as f64 / self.total_items as f64 * 100.0
+            } else {
+                0.0
+            }
+        );
+        println!(
+            "Ties:           {} ({:.1}%)",
+            self.ties,
+            if self.total_items > 0 {
+                self.ties as f64 / self.total_items as f64 * 100.0
+            } else {
+                0.0
+            }
+        );
         println!("----------------------------------------");
         println!("Avg PageIndex score: {:.2}/5", self.avg_pageindex_score);
         println!("Avg Vector score:    {:.2}/5", self.avg_vector_score);
@@ -180,16 +205,36 @@ impl BenchmarkResults {
     }
 }
 
+/// Compute a simple hash for a document to use as cache key.
+fn document_hash(doc: &str) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    let mut hasher = DefaultHasher::new();
+    doc.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Cache entry for a document tree with the original document.
+struct CachedTree {
+    tree: DocumentTree,
+    document: Document,
+}
+
 /// Benchmark runner.
 pub struct Benchmark {
     config: BenchmarkConfig,
     llm_config: LlmConfig,
+    /// Cache of document trees keyed by document hash.
+    tree_cache: Arc<RwLock<HashMap<u64, CachedTree>>>,
 }
 
 impl Benchmark {
     /// Create a new benchmark runner.
     pub fn new(llm_config: LlmConfig, config: BenchmarkConfig) -> Self {
-        Self { config, llm_config }
+        Self {
+            config,
+            llm_config,
+            tree_cache: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 
     /// Run the benchmark on a dataset.
@@ -267,10 +312,7 @@ impl Benchmark {
 
         // Run PageIndex
         if self.config.run_pageindex {
-            match self
-                .run_pageindex(item, indexer, searcher)
-                .await
-            {
+            match self.run_pageindex(item, indexer, searcher).await {
                 Ok((content, duration)) => {
                     result.pageindex_content = Some(content);
                     result.pageindex_time_ms = Some(duration.as_millis() as u64);
@@ -356,29 +398,80 @@ impl Benchmark {
     ) -> Result<(String, Duration)> {
         let start = Instant::now();
 
-        // Create document from item
-        let doc = Document::from_text(&item.id, item.document.clone());
+        // Compute document hash for caching
+        let doc_hash = document_hash(&item.document);
 
-        // Build tree index
-        let tree = indexer.index(&doc).await?;
+        // Check cache first
+        let cache = self.tree_cache.read().await;
+        let cached = cache.get(&doc_hash).map(|c| (c.tree.clone(), c.document.clone()));
+        drop(cache);
 
-        // Search
-        let search_results = searcher.search(&tree, &item.question).await?;
+        let (tree, doc) = if let Some((tree, doc)) = cached {
+            if self.config.verbose {
+                println!("  [PageIndex] Using cached tree for document");
+            }
+            (tree, doc)
+        } else {
+            // Create document from item
+            let doc = Document::from_text(&item.id, item.document.clone());
 
-        // Combine relevant content
+            // Build tree index
+            if self.config.verbose {
+                println!("  [PageIndex] Building tree index (not cached)...");
+            }
+            let tree = indexer.index(&doc).await?;
+
+            // Cache the tree
+            let mut cache = self.tree_cache.write().await;
+            cache.insert(doc_hash, CachedTree {
+                tree: tree.clone(),
+                document: doc.clone(),
+            });
+
+            (tree, doc)
+        };
+
+        // Search WITH CONTENT - this is critical for PageIndex to work!
+        let search_results = searcher
+            .search_with_content(&tree, &doc, &item.question)
+            .await?;
+
+        // Combine relevant content - now we actually have content!
         let content = search_results
             .iter()
             .filter(|r| matches!(r.relevance, Relevance::High | Relevance::Medium))
             .take(self.config.top_k)
             .map(|r| {
                 format!(
-                    "[Node: {}]\n{}",
+                    "[Section: {}] (pages {}-{})\n{}",
                     r.title,
+                    r.start_index,
+                    r.end_index,
                     r.content.as_deref().unwrap_or("(no content)")
                 )
             })
             .collect::<Vec<_>>()
             .join("\n\n---\n\n");
+
+        // If no high/medium results, fall back to any results
+        let content = if content.is_empty() {
+            search_results
+                .iter()
+                .take(self.config.top_k)
+                .map(|r| {
+                    format!(
+                        "[Section: {}] (pages {}-{})\n{}",
+                        r.title,
+                        r.start_index,
+                        r.end_index,
+                        r.content.as_deref().unwrap_or("(no content)")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n---\n\n")
+        } else {
+            content
+        };
 
         let duration = start.elapsed();
         Ok((content, duration))
@@ -419,7 +512,7 @@ mod tests {
     #[test]
     fn test_benchmark_results_summary() {
         let mut results = BenchmarkResults::new("test");
-        
+
         results.item_results.push(ItemResult {
             item_id: "1".to_string(),
             pageindex_content: Some("content".to_string()),

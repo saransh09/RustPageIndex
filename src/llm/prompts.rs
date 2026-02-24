@@ -201,6 +201,18 @@ The given structure contains the result of the previous part, you need to fill t
 Directly return the final JSON structure. Do not output anything else."#
     }
 
+    /// Prompt to generate a summary for a document section.
+    pub fn generate_node_summary() -> &'static str {
+        r#"You are given a section from a document. Generate a concise summary (2-3 sentences) describing the main topics and key information covered in this section.
+
+Section Title: {title}
+
+Section Content:
+{content}
+
+Provide ONLY the summary text, nothing else. Be specific about what information this section contains that would help someone searching for relevant content."#
+    }
+
     /// System prompt for general document analysis.
     pub fn system_document_analyzer() -> &'static str {
         "You are an expert document analyzer. You help extract structure, navigate content, and answer questions about documents. Always respond with valid JSON when requested."
@@ -219,5 +231,6 @@ mod tests {
         assert!(!Prompts::generate_toc_continue().is_empty());
         assert!(!Prompts::check_title_appearance().is_empty());
         assert!(!Prompts::tree_search().is_empty());
+        assert!(!Prompts::generate_node_summary().is_empty());
     }
 }

@@ -110,8 +110,7 @@ async fn cmd_index(document_path: PathBuf, output: PathBuf) -> Result<()> {
     let start = Instant::now();
 
     // Load document
-    let document =
-        Document::from_text_file(&document_path).context("Failed to load document")?;
+    let document = Document::from_text_file(&document_path).context("Failed to load document")?;
 
     println!(
         "  Document: {} ({} pages, ~{} tokens)",
@@ -290,7 +289,10 @@ async fn cmd_test() -> Result<()> {
     println!("Configuration:");
     println!("  API Base:  {}", config.llm.api_base);
     println!("  Model:     {}", config.llm.model);
-    println!("  API Key:   {}...", &config.llm.api_key[..config.llm.api_key.len().min(8)]);
+    println!(
+        "  API Key:   {}...",
+        &config.llm.api_key[..config.llm.api_key.len().min(8)]
+    );
     println!();
 
     if let Err(e) = config.validate() {

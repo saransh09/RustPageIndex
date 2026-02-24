@@ -17,9 +17,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use rust_page_indexer::config::Config;
 use rust_page_indexer::eval::{
-    Benchmark, BenchmarkConfig, BenchmarkResults,
-    create_sample_dataset, load_quality_dataset, load_simple_dataset,
-    ChunkConfig,
+    Benchmark, BenchmarkConfig, BenchmarkResults, ChunkConfig, create_sample_dataset,
+    load_quality_dataset, load_simple_dataset,
 };
 use std::path::PathBuf;
 
@@ -180,7 +179,7 @@ async fn download_quality(output_dir: &PathBuf) -> Result<()> {
     println!("Output: {:?}", output_path);
 
     let response = reqwest::get(url).await?;
-    
+
     if !response.status().is_success() {
         eprintln!("Failed to download: HTTP {}", response.status());
         std::process::exit(1);

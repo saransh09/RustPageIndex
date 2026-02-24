@@ -5,11 +5,12 @@
 //! 2. Generate hierarchical tree structure using LLM
 //! 3. Map sections to physical page indices
 //! 4. Verify and correct page mappings
+//! 5. Generate summaries for each node (optional but recommended)
 
 use crate::document::Document;
 use crate::error::{PageIndexError, Result};
 use crate::llm::{LlmClient, Prompts};
-use crate::tree::{build_tree_from_toc, DocumentTree, RawTocItem};
+use crate::tree::{DocumentTree, RawTocItem, TreeNode, build_tree_from_toc};
 
 /// Options for tree index generation.
 #[derive(Debug, Clone)]
@@ -20,6 +21,8 @@ pub struct IndexerOptions {
     pub verify_indices: bool,
     /// Maximum attempts to fix incorrect indices.
     pub max_fix_attempts: usize,
+    /// Whether to generate summaries for each node.
+    pub generate_summaries: bool,
 }
 
 impl Default for IndexerOptions {
@@ -28,6 +31,7 @@ impl Default for IndexerOptions {
             max_tokens_per_chunk: 20000,
             verify_indices: true,
             max_fix_attempts: 3,
+            generate_summaries: true, // Enable by default - critical for search quality!
         }
     }
 }
@@ -62,20 +66,96 @@ impl TreeIndexer {
         let toc_items = self.generate_toc_init(&content).await?;
 
         // Build tree structure from flat TOC items
-        let nodes = build_tree_from_toc(&toc_items, document.page_count());
+        let mut nodes = build_tree_from_toc(&toc_items, document.page_count());
+
+        // Generate summaries for each node if enabled
+        if self.options.generate_summaries {
+            self.generate_summaries_for_nodes(&mut nodes, document)
+                .await?;
+        }
+
+        // Assign node IDs for easier reference
+        Self::assign_node_ids(&mut nodes);
 
         let tree = DocumentTree::new(&document.name, nodes, document.page_count());
 
         Ok(tree)
     }
 
+    /// Generate summaries for all nodes in the tree.
+    async fn generate_summaries_for_nodes(
+        &self,
+        nodes: &mut [TreeNode],
+        document: &Document,
+    ) -> Result<()> {
+        for node in nodes.iter_mut() {
+            // Get the text content for this node
+            let text = document.content_range(node.start_index, node.end_index);
+
+            // Generate summary using LLM
+            let summary = self.generate_node_summary(&node.title, &text).await?;
+            node.summary = Some(summary);
+
+            // Recursively generate summaries for children
+            if !node.nodes.is_empty() {
+                // Use Box::pin to handle recursive async
+                Box::pin(self.generate_summaries_for_nodes(&mut node.nodes, document)).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Generate a summary for a single node.
+    async fn generate_node_summary(&self, title: &str, content: &str) -> Result<String> {
+        // Truncate content if too long to avoid token limits
+        let max_content_len = 8000; // ~2000 tokens
+        let truncated_content = if content.len() > max_content_len {
+            format!("{}...[truncated]", &content[..max_content_len])
+        } else {
+            content.to_string()
+        };
+
+        let prompt = format!(
+            "{}",
+            Prompts::generate_node_summary()
+                .replace("{title}", title)
+                .replace("{content}", &truncated_content)
+        );
+
+        let response = self
+            .client
+            .complete(Some(Prompts::system_document_analyzer()), &prompt)
+            .await?;
+
+        // Clean up the response
+        let summary = response.trim().to_string();
+
+        // Limit summary length
+        let max_summary_len = 500;
+        if summary.len() > max_summary_len {
+            Ok(format!("{}...", &summary[..max_summary_len]))
+        } else {
+            Ok(summary)
+        }
+    }
+
+    /// Assign node IDs to all nodes in the tree (depth-first).
+    fn assign_node_ids(nodes: &mut [TreeNode]) {
+        let mut counter = 0;
+        Self::assign_node_ids_recursive(nodes, &mut counter);
+    }
+
+    fn assign_node_ids_recursive(nodes: &mut [TreeNode], counter: &mut usize) {
+        for node in nodes.iter_mut() {
+            node.node_id = Some(format!("{:04}", *counter));
+            *counter += 1;
+            Self::assign_node_ids_recursive(&mut node.nodes, counter);
+        }
+    }
+
     /// Generate initial TOC/structure from document content.
     async fn generate_toc_init(&self, content: &str) -> Result<Vec<RawTocItem>> {
-        let prompt = format!(
-            "{}\nGiven text\n:{}",
-            Prompts::generate_toc_init(),
-            content
-        );
+        let prompt = format!("{}\nGiven text\n:{}", Prompts::generate_toc_init(), content);
 
         let response = self
             .client
@@ -183,11 +263,7 @@ impl TreeIndexer {
 
     /// Verify that section titles appear on their claimed pages.
     #[allow(dead_code)]
-    async fn verify_title_on_page(
-        &self,
-        title: &str,
-        page_content: &str,
-    ) -> Result<bool> {
+    async fn verify_title_on_page(&self, title: &str, page_content: &str) -> Result<bool> {
         let prompt = Prompts::check_title_appearance()
             .replace("{title}", title)
             .replace("{page_text}", page_content);
@@ -215,10 +291,7 @@ impl TreeIndexer {
 }
 
 /// Convenience function to index a document from a file path.
-pub async fn index_document(
-    path: &std::path::Path,
-    client: LlmClient,
-) -> Result<DocumentTree> {
+pub async fn index_document(path: &std::path::Path, client: LlmClient) -> Result<DocumentTree> {
     let document = Document::from_text_file(path)?;
     let indexer = TreeIndexer::new(client);
     indexer.index(&document).await

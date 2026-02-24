@@ -247,7 +247,10 @@ mod tests {
             ..Default::default()
         };
         let client = LlmClient::new(config);
-        assert_eq!(client.endpoint(), "https://api.example.com/v1/chat/completions");
+        assert_eq!(
+            client.endpoint(),
+            "https://api.example.com/v1/chat/completions"
+        );
 
         // Without trailing slash
         let config2 = LlmConfig {
@@ -257,6 +260,9 @@ mod tests {
             ..Default::default()
         };
         let client2 = LlmClient::new(config2);
-        assert_eq!(client2.endpoint(), "https://api.example.com/v1/chat/completions");
+        assert_eq!(
+            client2.endpoint(),
+            "https://api.example.com/v1/chat/completions"
+        );
     }
 }

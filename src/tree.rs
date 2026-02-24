@@ -116,13 +116,48 @@ impl TreeNode {
             .map(|s| format!("{} ", s))
             .unwrap_or_default();
 
+        let summary_str = self
+            .summary
+            .as_ref()
+            .map(|s| format!("\n{}  Summary: {}", prefix, s))
+            .unwrap_or_default();
+
         let mut result = format!(
-            "{}{}{} [pages {}-{}]\n",
-            prefix, structure_str, self.title, self.start_index, self.end_index
+            "{}{}{} [pages {}-{}]{}",
+            prefix, structure_str, self.title, self.start_index, self.end_index, summary_str
         );
+        result.push('\n');
 
         for child in &self.nodes {
             result.push_str(&child.format_tree(indent + 1));
+        }
+
+        result
+    }
+
+    /// Format for search (includes node_id and summary).
+    pub fn format_for_search(&self, indent: usize) -> String {
+        let prefix = "  ".repeat(indent);
+        let node_id_str = self
+            .node_id
+            .as_ref()
+            .map(|id| format!("[{}] ", id))
+            .unwrap_or_default();
+
+        let summary_str = self
+            .summary
+            .as_ref()
+            .map(|s| format!(" - {}", s))
+            .unwrap_or_default();
+
+        let mut result = format!(
+            "{}{}{} (pages {}-{}){}",
+            prefix, node_id_str, self.title, self.start_index, self.end_index, summary_str
+        );
+        result.push('\n');
+
+        for child in &self.nodes {
+            result.push_str(&child.format_for_search(indent + 1));
         }
 
         result
@@ -198,6 +233,20 @@ impl DocumentTree {
 
         for node in &self.nodes {
             result.push_str(&node.format_tree(0));
+        }
+
+        result
+    }
+
+    /// Format tree for search (includes node_ids and summaries).
+    pub fn format_for_search(&self) -> String {
+        let mut result = format!(
+            "Document: {} ({} pages)\n\nSections:\n",
+            self.name, self.total_pages,
+        );
+
+        for node in &self.nodes {
+            result.push_str(&node.format_for_search(0));
         }
 
         result

@@ -5,14 +5,16 @@
 //! - LLM-as-judge evaluation framework
 //! - Benchmark dataset loading (QuALITY, QASPER)
 
-pub mod embeddings;
-pub mod vector_search;
-pub mod judge;
-pub mod dataset;
 pub mod benchmark;
+pub mod dataset;
+pub mod embeddings;
+pub mod judge;
+pub mod vector_search;
 
-pub use embeddings::EmbeddingModel;
-pub use vector_search::{VectorIndex, VectorSearcher, ChunkConfig};
-pub use judge::{LlmJudge, JudgeResult, ComparisonResult};
-pub use dataset::{Dataset, DatasetItem, load_quality_dataset, load_simple_dataset, create_sample_dataset};
 pub use benchmark::{Benchmark, BenchmarkConfig, BenchmarkResults};
+pub use dataset::{
+    Dataset, DatasetItem, create_sample_dataset, load_quality_dataset, load_simple_dataset,
+};
+pub use embeddings::EmbeddingModel;
+pub use judge::{ComparisonResult, JudgeResult, LlmJudge};
+pub use vector_search::{ChunkConfig, VectorIndex, VectorSearcher};

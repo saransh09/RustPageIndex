@@ -1,6 +1,6 @@
 //! Vector search implementation for baseline comparison.
 
-use super::embeddings::{cosine_similarity, EmbeddingModel};
+use super::embeddings::{EmbeddingModel, cosine_similarity};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -111,11 +111,7 @@ impl VectorIndex {
                     if let Some(pos) = search_text.rfind(|c| c == '.' || c == '!' || c == '?') {
                         let candidate = search_start + pos + 1;
                         // Only use this if it's past start
-                        if candidate > start {
-                            candidate
-                        } else {
-                            end
-                        }
+                        if candidate > start { candidate } else { end }
                     } else {
                         end
                     }

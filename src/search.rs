@@ -99,17 +99,12 @@ impl TreeSearcher {
     }
 
     /// Search the document tree for relevant sections.
-    pub async fn search(
-        &self,
-        tree: &DocumentTree,
-        query: &str,
-    ) -> Result<Vec<SearchResult>> {
-        let tree_json = tree
-            .to_json()
-            .map_err(|e| PageIndexError::Serialization(e.to_string()))?;
+    pub async fn search(&self, tree: &DocumentTree, query: &str) -> Result<Vec<SearchResult>> {
+        // Use the search-friendly format that includes summaries
+        let tree_structure = tree.format_for_search();
 
         let prompt = Prompts::tree_search()
-            .replace("{tree_structure}", &tree_json)
+            .replace("{tree_structure}", &tree_structure)
             .replace("{query}", query);
 
         let response = self
