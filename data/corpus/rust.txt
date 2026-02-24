@@ -1,0 +1,26 @@
+Rust Programming Language
+
+Rust is a systems programming language focused on safety, speed, and concurrency.
+It accomplishes these goals without having a garbage collector, making it a useful
+language for a number of use cases other languages aren't good at: embedding in
+other languages, programs with specific space and time requirements, and writing
+low-level code, like device drivers and operating systems.
+
+Rust's rich type system and ownership model guarantee memory-safety and thread-safety
+at compile-time. This allows you to eliminate many classes of bugs before your code
+even runs.
+
+Key features of Rust include:
+- Zero-cost abstractions
+- Move semantics
+- Guaranteed memory safety
+- Threads without data races
+- Trait-based generics
+- Pattern matching
+- Type inference
+- Minimal runtime
+- Efficient C bindings
+
+Rust is used by companies like Mozilla, Dropbox, Cloudflare, and Discord for building
+reliable and efficient software. The language continues to grow in popularity for
+systems programming, web assembly, and embedded development.

@@ -1,0 +1,28 @@
+Python Programming Language
+
+Python is a high-level, interpreted programming language known for its clear syntax
+and readability. Created by Guido van Rossum and first released in 1991, Python has
+become one of the most popular programming languages in the world.
+
+Python emphasizes code readability with its notable use of significant whitespace.
+Its language constructs and object-oriented approach aim to help programmers write
+clear, logical code for small and large-scale projects.
+
+Key features of Python include:
+- Dynamic typing
+- Automatic memory management (garbage collection)
+- Large standard library
+- Support for multiple programming paradigms
+- Easy to learn and use
+- Extensive ecosystem of packages (PyPI)
+- Interactive interpreter (REPL)
+
+Python is widely used in:
+- Web development (Django, Flask)
+- Data science and machine learning (NumPy, Pandas, TensorFlow)
+- Scientific computing
+- Automation and scripting
+- Artificial intelligence
+
+Major companies like Google, Facebook, Instagram, and Spotify use Python extensively
+in their technology stacks.

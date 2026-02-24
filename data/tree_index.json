@@ -1,0 +1,12 @@
+{
+  "name": "rust",
+  "nodes": [
+    {
+      "title": "Rust Programming Language",
+      "structure": "1",
+      "start_index": 1,
+      "end_index": 1
+    }
+  ],
+  "total_pages": 1
+}

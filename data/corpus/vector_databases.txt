@@ -1,0 +1,36 @@
+Vector Databases and Embeddings
+
+Vector databases are specialized databases designed to store and search high-dimensional
+vector embeddings. These embeddings are numerical representations of data (like text,
+images, or audio) produced by machine learning models.
+
+How embeddings work:
+When text is passed through a neural network (like BERT, GPT, or other transformer models),
+it produces a fixed-length vector of floating-point numbers. This vector captures the
+semantic meaning of the text in a way that allows similar content to have similar vectors.
+
+Key concepts:
+- Embedding dimension: The number of elements in the vector (e.g., 768, 1536)
+- Cosine similarity: A measure of similarity between two vectors
+- Approximate nearest neighbor (ANN): Algorithms for fast similarity search
+- Index structures: HNSW, IVF, and other methods for efficient retrieval
+
+Popular vector databases:
+- Pinecone
+- Weaviate
+- Milvus
+- Qdrant
+- Chroma
+
+Challenges with embeddings:
+- Computational cost: Requires GPU for efficient inference
+- Storage requirements: Each document needs hundreds or thousands of floats
+- Model versioning: Different models produce incompatible embeddings
+- Opacity: Difficult to understand why documents are considered similar
+
+Use cases:
+- Semantic search
+- Recommendation systems
+- Image similarity
+- Question answering
+- Retrieval-augmented generation (RAG)

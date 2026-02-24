@@ -1,0 +1,35 @@
+Compression Algorithms and Information Theory
+
+Data compression reduces the size of data by exploiting redundancy and patterns.
+The field is closely tied to information theory, pioneered by Claude Shannon.
+
+Types of compression:
+1. Lossless compression: Original data can be perfectly reconstructed
+   - Examples: gzip, bzip2, LZ77, Huffman coding
+   - Used for: text, executables, archives
+
+2. Lossy compression: Some information is discarded
+   - Examples: JPEG, MP3, H.264
+   - Used for: images, audio, video
+
+Key concepts:
+- Entropy: The theoretical minimum bits needed to represent data
+- Dictionary-based compression: LZ77, LZ78, LZW
+- Statistical compression: Huffman, arithmetic coding
+- Run-length encoding: Efficient for repetitive data
+
+The compression-search connection:
+An interesting insight is that compression algorithms implicitly learn the structure
+of data. A good compressor identifies patterns and redundancies, which are exactly
+what we need for effective search indexing.
+
+If two documents compress well together (i.e., the combined size is much less than
+the sum of individual sizes), they likely share significant common content. This
+principle can be used for:
+- Similarity detection
+- Plagiarism detection
+- Document clustering
+- Search relevance
+
+This approach is deterministic, transparent, and doesn't require expensive
+neural network inference.
