@@ -18,6 +18,17 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
+/// Truncate a string to a maximum length, adding "..." if truncated.
+fn truncate_str(s: &str, max_len: usize) -> String {
+    // Replace newlines with spaces for cleaner output
+    let s = s.replace('\n', " ").replace("  ", " ");
+    if s.len() <= max_len {
+        s
+    } else {
+        format!("{}...", &s[..max_len])
+    }
+}
+
 /// Configuration for the benchmark.
 #[derive(Debug, Clone)]
 pub struct BenchmarkConfig {
@@ -324,6 +335,11 @@ impl Benchmark {
             error: None,
         };
 
+        // Print question in verbose mode
+        if self.config.verbose {
+            println!("  Question: {}", truncate_str(&item.question, 200));
+        }
+
         // Run PageIndex retrieval
         if self.config.run_pageindex {
             match self.run_pageindex(item, indexer, searcher).await {
@@ -332,14 +348,14 @@ impl Benchmark {
                     result.pageindex_time_ms = Some(duration.as_millis() as u64);
 
                     // Generate answer from retrieved content
-                    if self.config.verbose {
-                        println!("  [PageIndex] Generating answer from retrieved content...");
-                    }
                     match self
                         .generate_answer(llm_client, &item.question, &content)
                         .await
                     {
                         Ok(answer) => {
+                            if self.config.verbose {
+                                println!("  [PageIndex] Answer: {}", truncate_str(&answer, 500));
+                            }
                             result.pageindex_answer = Some(answer);
                         }
                         Err(e) => {
@@ -367,14 +383,14 @@ impl Benchmark {
                         result.vector_time_ms = Some(duration.as_millis() as u64);
 
                         // Generate answer from retrieved content (standard RAG)
-                        if self.config.verbose {
-                            println!("  [Vector RAG] Generating answer from retrieved content...");
-                        }
                         match self
                             .generate_answer(llm_client, &item.question, &content)
                             .await
                         {
                             Ok(answer) => {
+                                if self.config.verbose {
+                                    println!("  [VectorRAG] Answer: {}", truncate_str(&answer, 500));
+                                }
                                 result.vector_answer = Some(answer);
                             }
                             Err(e) => {
@@ -403,9 +419,6 @@ impl Benchmark {
         if let (Some(pi_answer), Some(vec_answer)) =
             (&result.pageindex_answer, &result.vector_answer)
         {
-            if self.config.verbose {
-                println!("  [Judge] Comparing answers...");
-            }
             match judge
                 .compare_answers(
                     &item.question,
@@ -428,6 +441,7 @@ impl Benchmark {
                             "  Winner: {} (PI: {}/5, Vec: {}/5)",
                             winner_str, comparison.score_system1, comparison.score_system2
                         );
+                        println!("  Judge: {}", truncate_str(&comparison.explanation, 300));
                     }
                     result.comparison = Some(comparison);
                 }
