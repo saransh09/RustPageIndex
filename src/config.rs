@@ -11,13 +11,13 @@ use std::path::PathBuf;
 /// LLM configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
-    /// Base URL for the LLM API (e.g., "https://your-llm-proxy.example.com/")
+    /// Base URL for the LLM API (e.g., "https://api.openai.com")
     pub api_base: String,
 
     /// API key for authentication
     pub api_key: String,
 
-    /// Model name (e.g., "claude-latest", "gpt-5")
+    /// Model name (e.g., "gpt-4", "claude-3-opus")
     pub model: String,
 
     /// Maximum tokens for response (optional)

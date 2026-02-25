@@ -58,12 +58,12 @@ llm:
 
 ### Using with LLM Proxies
 
-If you have access to an LLM proxy (like `your-llm-proxy.example.com`), configure it as:
+If you have access to an OpenAI-compatible LLM proxy, configure it as:
 
 ```bash
 export LLM_API_BASE="https://your-llm-proxy.example.com/"
 export LLM_API_KEY="your-proxy-key"
-export LLM_MODEL="claude-latest"  # or gpt-5, gemini-2.5-pro, etc.
+export LLM_MODEL="claude-3-opus"  # or gpt-4, etc.
 ```
 
 ## Usage

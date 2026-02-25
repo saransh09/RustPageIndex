@@ -1,7 +1,7 @@
 //! OpenAI-compatible LLM client.
 //!
 //! This client works with any OpenAI-compatible API endpoint,
-//! including proxies like the one at your-llm-proxy.example.com.
+//! including custom LLM proxies.
 
 use crate::config::LlmConfig;
 use crate::error::{PageIndexError, Result};

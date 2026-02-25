@@ -1,4 +1,4 @@
-LLM API Base: https://your-llm-proxy.example.com/
+LLM API Base: [REDACTED]
 LLM Model: claude-latest
 Loading QuALITY dataset from "data/quality_dev.jsonl"...
 Dataset: QuALITY (2086 items)
